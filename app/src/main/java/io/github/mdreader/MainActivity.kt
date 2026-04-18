@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.github.mdreader.ui.theme.MdReaderTheme
+import io.github.mdreader.R
 import org.commonmark.node.Heading
 import org.commonmark.node.Node
 import org.commonmark.node.Paragraph
