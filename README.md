@@ -8,15 +8,23 @@ This repository currently provides:
 
 - a single-activity Android app
 - Jetpack Compose UI
-- light and dark theme support
+- manual light and dark theme switching from the top app bar
 - opening local markdown/text files through the Android file picker
 - opening markdown-ish files from Android `ACTION_VIEW` intents such as "Open with"
 - reading incoming `Uri` content through `ContentResolver`
 - basic markdown rendering for headings, paragraphs, lists, and fenced code blocks
 - plain-text fallback when content does not map to the supported markdown subset
+- a minimal reading screen with a proper top app bar and no visible filename/path chrome
 - GitHub Actions build workflow for generating a debug APK
 
 The current app supports a practical MVP reader flow. Rich markdown rendering, clickable links, inline emphasis styling, images, and broader file-provider compatibility are still pending.
+
+## Current UI
+
+- top app bar with the app title
+- `Open` action in the top bar for choosing a markdown/text file
+- `Dark` or `Light` action in the top bar for manual theme switching
+- document content shown directly without showing the filename or raw file path on the reading screen
 
 ## Tech stack
 

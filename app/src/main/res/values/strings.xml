@@ -1,8 +1,9 @@
 <resources>
     <string name="app_name">MD Reader</string>
-    <string name="open_document_button">Choose file</string>
+    <string name="open_document_button">Open</string>
+    <string name="theme_toggle_dark">Dark</string>
+    <string name="theme_toggle_light">Light</string>
     <string name="empty_state_title">No document opened</string>
     <string name="empty_state_body">Open a .md or .txt file from storage, or use Open with from another app.</string>
     <string name="error_prefix">Could not open file</string>
-    <string name="document_fallback_title">Markdown document</string>
 </resources>

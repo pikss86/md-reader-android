@@ -6,7 +6,6 @@ import android.content.Intent.EXTRA_STREAM
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -15,7 +14,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.IntentCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,12 +21,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -68,9 +68,16 @@ class MainActivity : ComponentActivity() {
         incomingRequest.value = extractDocumentRequest(intent)
 
         setContent {
-            MdReaderTheme {
+            val systemDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
+            var darkTheme by rememberSaveable { mutableStateOf(systemDarkTheme) }
+
+            MdReaderTheme(darkTheme = darkTheme) {
                 Surface {
-                    MarkdownReaderApp(incomingRequest = incomingRequest.value)
+                    MarkdownReaderApp(
+                        incomingRequest = incomingRequest.value,
+                        darkTheme = darkTheme,
+                        onToggleTheme = { darkTheme = !darkTheme }
+                    )
                 }
             }
         }
@@ -83,8 +90,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MarkdownReaderApp(incomingRequest: DocumentRequest?) {
+private fun MarkdownReaderApp(
+    incomingRequest: DocumentRequest?,
+    darkTheme: Boolean,
+    onToggleTheme: () -> Unit
+) {
     val context = LocalContext.current
     var documentState by rememberSaveable(stateSaver = MarkdownDocumentState.Saver) {
         mutableStateOf(MarkdownDocumentState.Empty)
@@ -111,34 +123,36 @@ private fun MarkdownReaderApp(incomingRequest: DocumentRequest?) {
         pendingRequest = null
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text(text = stringResource(id = R.string.app_name)) },
+                actions = {
+                    TextButton(onClick = onToggleTheme) {
+                        Text(
+                            text = stringResource(
+                                id = if (darkTheme) {
+                                    R.string.theme_toggle_light
+                                } else {
+                                    R.string.theme_toggle_dark
+                                }
+                            )
+                        )
+                    }
+                    TextButton(onClick = { openDocumentLauncher.launch(arrayOf("text/*", "*/*")) }) {
+                        Text(text = stringResource(id = R.string.open_document_button))
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(20.dp)
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = documentState.title,
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    documentState.subtitle?.let { subtitle ->
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Button(onClick = { openDocumentLauncher.launch(arrayOf("text/*", "*/*")) }) {
-                    Text(text = stringResource(id = R.string.open_document_button))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
             when (val state = documentState) {
                 MarkdownDocumentState.Empty -> {
                     EmptyStateCard()
@@ -240,11 +254,7 @@ private fun loadMarkdownDocument(context: Context, uri: Uri): MarkdownDocumentSt
                 context.getString(R.string.error_prefix) + ": empty file"
             )
         } else {
-            val fileName = queryDisplayName(context, uri)
-                ?: context.getString(R.string.document_fallback_title)
             MarkdownDocumentState.Loaded(
-                title = fileName,
-                subtitle = uri.toString(),
                 rawMarkdown = rawMarkdown,
                 blocks = parseMarkdownBlocks(rawMarkdown)
             )
@@ -258,15 +268,6 @@ private fun loadMarkdownDocument(context: Context, uri: Uri): MarkdownDocumentSt
             context.getString(R.string.error_prefix) + ": ${error.message.orEmpty()}"
         )
     }
-}
-
-private fun queryDisplayName(context: Context, uri: Uri): String? {
-    return context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        ?.use { cursor ->
-            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
-        }
-        ?: uri.lastPathSegment?.substringAfterLast('/')
 }
 
 private fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
@@ -355,31 +356,18 @@ private sealed interface MarkdownBlock {
 }
 
 private sealed interface MarkdownDocumentState {
-    val title: String
-    val subtitle: String?
-
-    data object Empty : MarkdownDocumentState {
-        override val title: String = "MD Reader"
-        override val subtitle: String? = null
-    }
+    data object Empty : MarkdownDocumentState
 
     data class Loaded(
-        override val title: String,
-        override val subtitle: String?,
         val rawMarkdown: String,
         val blocks: List<MarkdownBlock>
     ) : MarkdownDocumentState
 
-    data class Error(val message: String) : MarkdownDocumentState {
-        override val title: String = "MD Reader"
-        override val subtitle: String? = null
-    }
+    data class Error(val message: String) : MarkdownDocumentState
 
     companion object {
         private const val KEY_TYPE = "type"
         private const val KEY_MESSAGE = "message"
-        private const val KEY_TITLE = "title"
-        private const val KEY_SUBTITLE = "subtitle"
         private const val KEY_RAW = "raw"
         private const val TYPE_EMPTY = "empty"
         private const val TYPE_ERROR = "error"
@@ -395,8 +383,6 @@ private sealed interface MarkdownDocumentState {
                     )
                     is Loaded -> mapOf(
                         KEY_TYPE to TYPE_LOADED,
-                        KEY_TITLE to state.title,
-                        KEY_SUBTITLE to state.subtitle,
                         KEY_RAW to state.rawMarkdown
                     )
                 }
@@ -408,8 +394,6 @@ private sealed interface MarkdownDocumentState {
                     TYPE_LOADED -> {
                         val rawMarkdown = saved[KEY_RAW] as? String ?: return@mapSaver Empty
                         Loaded(
-                            title = saved[KEY_TITLE] as? String ?: return@mapSaver Empty,
-                            subtitle = saved[KEY_SUBTITLE] as? String,
                             rawMarkdown = rawMarkdown,
                             blocks = parseMarkdownBlocks(rawMarkdown)
                         )
@@ -443,6 +427,10 @@ private val requestIds = AtomicLong()
 @Composable
 private fun MarkdownReaderAppPreview() {
     MdReaderTheme {
-        MarkdownReaderApp(incomingRequest = null)
+        MarkdownReaderApp(
+            incomingRequest = null,
+            darkTheme = false,
+            onToggleTheme = {}
+        )
     }
 }
