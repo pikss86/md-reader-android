@@ -50,7 +50,6 @@ import org.commonmark.node.BulletList
 import org.commonmark.node.Code
 import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.HardLineBreak
-import org.commonmark.node.Item
 import org.commonmark.node.Node
 import org.commonmark.node.OrderedList
 import org.commonmark.node.Paragraph
@@ -315,7 +314,7 @@ private fun org.commonmark.node.ListBlock.extractListItems(): List<MarkdownBlock
     var index = if (this is OrderedList) startNumber else 1
 
     while (current != null) {
-        if (current is Item) {
+        if (current is org.commonmark.node.ListItem) {
             val text = current.extractPlainText()
             if (text.isNotBlank()) {
                 val marker = if (this is OrderedList) "${index}." else "-"
