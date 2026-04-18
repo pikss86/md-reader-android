@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">MD Reader</string>
+    <string name="open_document_title">Open Markdown file</string>
+    <string name="open_document_button">Choose file</string>
+    <string name="empty_state_title">No document opened</string>
+    <string name="empty_state_body">Open a .md file from storage or share one into the app.</string>
+    <string name="error_prefix">Could not open file</string>
+    <string name="document_fallback_title">Markdown document</string>
+    <string name="raw_markdown_label">Raw Markdown</string>
+</resources>
+
