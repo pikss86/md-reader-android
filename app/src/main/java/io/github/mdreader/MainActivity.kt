@@ -1,9 +1,10 @@
 package io.github.mdreader
 
+import android.content.Context
+import android.content.ClipData
 import android.content.Intent
 import android.content.Intent.ACTION_VIEW
 import android.content.Intent.EXTRA_STREAM
-import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,13 +15,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.IntentCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -38,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -98,6 +102,7 @@ private fun MarkdownReaderApp(
     onToggleTheme: () -> Unit
 ) {
     val context = LocalContext.current
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     var documentState by rememberSaveable(stateSaver = MarkdownDocumentState.Saver) {
         mutableStateOf(MarkdownDocumentState.Empty)
     }
@@ -107,7 +112,7 @@ private fun MarkdownReaderApp(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            pendingRequest = DocumentRequest(uri)
+            pendingRequest = DocumentRequest(DocumentSource.UriContent(uri))
         }
     }
 
@@ -119,15 +124,18 @@ private fun MarkdownReaderApp(
 
     LaunchedEffect(pendingRequest?.requestId) {
         val request = pendingRequest ?: return@LaunchedEffect
-        documentState = loadMarkdownDocument(context, request.uri)
+        documentState = loadMarkdownDocument(context, request)
         pendingRequest = null
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = { Text(text = stringResource(id = R.string.app_name)) },
+                scrollBehavior = scrollBehavior,
                 actions = {
                     TextButton(onClick = onToggleTheme) {
                         Text(
@@ -147,22 +155,19 @@ private fun MarkdownReaderApp(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(20.dp)
-        ) {
-            when (val state = documentState) {
-                MarkdownDocumentState.Empty -> {
+        when (val state = documentState) {
+            MarkdownDocumentState.Empty -> {
+                StaticScreenContent(innerPadding) {
                     EmptyStateCard()
                 }
-                is MarkdownDocumentState.Error -> {
+            }
+            is MarkdownDocumentState.Error -> {
+                StaticScreenContent(innerPadding) {
                     MessageCard(state.message)
                 }
-                is MarkdownDocumentState.Loaded -> {
-                    MarkdownDocumentView(state)
-                }
+            }
+            is MarkdownDocumentState.Loaded -> {
+                MarkdownDocumentView(state = state, innerPadding = innerPadding)
             }
         }
     }
@@ -190,19 +195,43 @@ private fun MessageCard(message: String, title: String? = null) {
 }
 
 @Composable
-private fun MarkdownDocumentView(state: MarkdownDocumentState.Loaded) {
+private fun StaticScreenContent(
+    innerPadding: PaddingValues,
+    content: @Composable () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .padding(innerPadding)
+            .padding(20.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun MarkdownDocumentView(
+    state: MarkdownDocumentState.Loaded,
+    innerPadding: PaddingValues
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 20.dp,
+            top = innerPadding.calculateTopPadding() + 20.dp,
+            end = 20.dp,
+            bottom = innerPadding.calculateBottomPadding() + 20.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (state.blocks.isEmpty()) {
-            MessageCard(message = state.rawMarkdown)
-            return
+            item {
+                MessageCard(message = state.rawMarkdown)
+            }
+            return@LazyColumn
         }
 
-        state.blocks.forEach { block ->
+        items(state.blocks) { block ->
             when (block) {
                 is MarkdownBlock.Heading -> Text(
                     text = block.text,
@@ -233,7 +262,26 @@ private fun MarkdownDocumentView(state: MarkdownDocumentState.Loaded) {
     }
 }
 
-private fun loadMarkdownDocument(context: Context, uri: Uri): MarkdownDocumentState {
+private fun loadMarkdownDocument(context: Context, request: DocumentRequest): MarkdownDocumentState {
+    return when (val source = request.source) {
+        is DocumentSource.SharedText -> {
+            val rawMarkdown = source.text.trim()
+            if (rawMarkdown.isBlank()) {
+                MarkdownDocumentState.Error(
+                    context.getString(R.string.error_prefix) + ": empty file"
+                )
+            } else {
+                MarkdownDocumentState.Loaded(
+                    rawMarkdown = rawMarkdown,
+                    blocks = parseMarkdownBlocks(rawMarkdown)
+                )
+            }
+        }
+        is DocumentSource.UriContent -> loadMarkdownDocumentFromUri(context, source.uri)
+    }
+}
+
+private fun loadMarkdownDocumentFromUri(context: Context, uri: Uri): MarkdownDocumentState {
     try {
         context.contentResolver.takePersistableUriPermission(
             uri,
@@ -406,22 +454,53 @@ private sealed interface MarkdownDocumentState {
 }
 
 private data class DocumentRequest(
-    val uri: Uri,
+    val source: DocumentSource,
     val requestId: Long = requestIds.incrementAndGet()
 )
 
 private fun extractDocumentRequest(intent: Intent?): DocumentRequest? {
     if (intent == null) return null
 
-    val uri = when (intent.action) {
-        ACTION_VIEW -> intent.data
-        else -> intent.data ?: IntentCompat.getParcelableExtra(intent, EXTRA_STREAM, Uri::class.java)
-    } ?: return null
+    intent.extractSharedUri()?.let { uri ->
+        return DocumentRequest(DocumentSource.UriContent(uri))
+    }
 
-    return DocumentRequest(uri)
+    val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }
+    if (sharedText != null && intent.type?.startsWith("text/") != false) {
+        return DocumentRequest(DocumentSource.SharedText(sharedText))
+    }
+
+    return null
+}
+
+private fun Intent.extractSharedUri(): Uri? {
+    if (action == ACTION_VIEW) {
+        data?.let { return it }
+    }
+
+    IntentCompat.getParcelableExtra(this, EXTRA_STREAM, Uri::class.java)?.let { return it }
+    data?.let { return it }
+    clipData.firstUriOrNull()?.let { return it }
+
+    return null
+}
+
+private fun ClipData?.firstUriOrNull(): Uri? {
+    if (this == null) return null
+
+    for (index in 0 until itemCount) {
+        getItemAt(index).uri?.let { return it }
+    }
+
+    return null
 }
 
 private val requestIds = AtomicLong()
+
+private sealed interface DocumentSource {
+    data class UriContent(val uri: Uri) : DocumentSource
+    data class SharedText(val text: String) : DocumentSource
+}
 
 @Preview(showBackground = true)
 @Composable

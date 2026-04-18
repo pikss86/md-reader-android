@@ -11,10 +11,11 @@ This repository currently provides:
 - manual light and dark theme switching from the top app bar
 - opening local markdown/text files through the Android file picker
 - opening markdown-ish files from Android `ACTION_VIEW` intents such as "Open with"
+- opening shared markdown/text attachments from Android `ACTION_SEND` flows, including chat apps that provide `EXTRA_STREAM`, clip data, `text/plain`, or generic MIME types
 - reading incoming `Uri` content through `ContentResolver`
 - basic markdown rendering for headings, paragraphs, lists, and fenced code blocks
 - plain-text fallback when content does not map to the supported markdown subset
-- a minimal reading screen with a proper top app bar and no visible filename/path chrome
+- a minimal reading screen with a proper top app bar that hides upward while reading, and no visible filename/path chrome
 - GitHub Actions build workflow for generating a debug APK
 
 The current app supports a practical MVP reader flow. Rich markdown rendering, clickable links, inline emphasis styling, images, and broader file-provider compatibility are still pending.
@@ -24,6 +25,7 @@ The current app supports a practical MVP reader flow. Rich markdown rendering, c
 - top app bar with the app title
 - `Open` action in the top bar for choosing a markdown/text file
 - `Dark` or `Light` action in the top bar for manual theme switching
+- standard upward-hiding top app bar behavior while scrolling the document
 - document content shown directly without showing the filename or raw file path on the reading screen
 
 ## Tech stack
